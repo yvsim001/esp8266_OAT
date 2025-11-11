@@ -60,10 +60,10 @@ void loop() {
     last = now;
   }
 
-  digitalWrite(LED, LOW);   // allume
-  delay(500);
+  //digitalWrite(LED, LOW);   // allume
+  //delay(500);
   digitalWrite(LED, HIGH);  // éteint
-  delay(500);
+  //delay(500);
 
   delay(10);
 }
