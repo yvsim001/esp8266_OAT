@@ -1,29 +1,44 @@
 name: build-publish-pages
+
 on:
   push:
     branches: [ main ]
+
+permissions:
+  contents: write   # <-- indispensable pour pousser sur gh-pages
 
 jobs:
   build-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
+        with:
+          python-version: '3.11'
+
       - name: Install PlatformIO
         run: pip install platformio
+
       - name: Build firmware
         run: pio run -e d1_mini
-      - name: Prepare site
+
+      - name: Prepare site (public/)
         run: |
+          set -e
           VER=$(date +%Y.%m.%d.%H%M%S)
           mkdir -p public/firmware
           cp .pio/build/d1_mini/firmware.bin public/firmware/esp8266-power-${VER}.bin
           cat > public/manifest.json <<EOF
           {"model":"esp8266-power","version":"${VER}","url":"https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/firmware/esp8266-power-${VER}.bin"}
           EOF
+          echo "Built manifest:"
+          cat public/manifest.json
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
           publish_dir: public
+          force_orphan: true   # <-- crée gh-pages si absent, proprement
