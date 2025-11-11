@@ -13,7 +13,7 @@
 #define FW_VERSION "v1.0.0"
 #endif
 #ifndef FW_MANIFEST_URL
-#define FW_MANIFEST_URL "https://yvsimm01.github.io/esp8266_OAT/manifest.json"
+#define FW_MANIFEST_URL "https://github.com/yvsim001/esp8266_OAT/blob/main/manifest.json"
 #endif
 
 // --- PROTOTYPES ---
