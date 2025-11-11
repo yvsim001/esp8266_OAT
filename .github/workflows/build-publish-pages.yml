@@ -12,17 +12,16 @@ jobs:
         with: { python-version: '3.11' }
       - name: Install PlatformIO
         run: pip install platformio
-
       - name: Build firmware
         run: pio run -e d1_mini
-
       - name: Prepare site
         run: |
-          VER=$(date +%Y.%m.%d.%H%M%S)   # version horodatée
+          VER=$(date +%Y.%m.%d.%H%M%S)
           mkdir -p public/firmware
           cp .pio/build/d1_mini/firmware.bin public/firmware/esp8266-power-${VER}.bin
-          echo "{\"model\":\"esp8266-power\",\"version\":\"${VER}\",\"url\":\"https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/firmware/esp8266-power-${VER}.bin\"}" > public/manifest.json
-
+          cat > public/manifest.json <<EOF
+          {"model":"esp8266-power","version":"${VER}","url":"https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/firmware/esp8266-power-${VER}.bin"}
+          EOF
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
