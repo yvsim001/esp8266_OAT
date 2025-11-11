@@ -13,7 +13,7 @@
 #define FW_VERSION "v1.0.0"
 #endif
 #ifndef FW_MANIFEST_URL
-#define FW_MANIFEST_URL "https://github.com/yvsim001/esp8266_OAT/blob/main/manifest.json"
+#define FW_MANIFEST_URL "https://raw.githubusercontent.com/yvsim001/esp8266_OAT/main/manifest.json"
 #endif
 
 // --- PROTOTYPES ---
@@ -52,27 +52,33 @@ void loop() {
 // --- OTA PULL (HTTPS, insecure pour démarrer) ---
 bool httpCheckAndUpdate() {
   std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
-  client->setInsecure(); // simple pour démarrer (à durcir plus tard)
+  client->setInsecure();
 
   HTTPClient http;
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);   // <--- important
+
+  Serial.print("[OTA] GET: "); Serial.println(FW_MANIFEST_URL);
   if (!http.begin(*client, String(FW_MANIFEST_URL))) return false;
 
   int code = http.GET();
+  Serial.print("[OTA] HTTP code: "); Serial.println(code);
   if (code != 200) { http.end(); return false; }
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<1024> doc;
   DeserializationError err = deserializeJson(doc, http.getStream());
   http.end();
-  if (err) return false;
+  if (err) { Serial.print("[OTA] JSON error: "); Serial.println(err.c_str()); return false; }
 
   const char* model   = doc["model"]   | "";
   const char* version = doc["version"] | "";
   const char* url     = doc["url"]     | "";
+  Serial.printf("[OTA] model=%s version=%s url=%s\n", model, version, url);
 
   if (String(model) != FW_MODEL) return false;
-  if (String(version) == FW_VERSION) return false;
+  if (String(version) == FW_VERSION) { Serial.println("[OTA] déjà à jour"); return false; }
 
   ESPhttpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
   t_httpUpdate_return ret = ESPhttpUpdate.update(*client, String(url), String(FW_VERSION));
+  Serial.printf("[OTA] result=%d (%s)\n", ret, ESPhttpUpdate.getLastErrorString().c_str());
   return (ret == HTTP_UPDATE_OK);
 }
