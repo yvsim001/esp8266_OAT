@@ -17,11 +17,15 @@
 #define FW_MANIFEST_URL "https://raw.githubusercontent.com/yvsim001/esp8266_OAT/main/manifest.json"
 #endif
 
+// Blink LED intégrée (D4 / GPIO2, active LOW)
+const int LED = LED_BUILTIN;  // équivaut à GPIO2 sur D1 mini
+
 // --- PROTOTYPE ---
 bool httpCheckAndUpdate();
 
 void setup() {
   Serial.begin(115200);
+  pinMode(LED, OUTPUT);
   delay(200);
   Serial.println();
   Serial.println(F("[BOOT]"));
@@ -55,6 +59,11 @@ void loop() {
     httpCheckAndUpdate();
     last = now;
   }
+
+  digitalWrite(LED, LOW);   // allume
+  delay(500);
+  digitalWrite(LED, HIGH);  // éteint
+  delay(500);
 
   delay(10);
 }
