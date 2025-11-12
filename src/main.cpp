@@ -32,8 +32,9 @@ void setup() {
 
   // ---- WiFi via WiFiManager (portail captif) ----
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);                    // <- évite les micro-coupures pendant OTA
   WiFiManager wm;
-  wm.setConfigPortalTimeout(180);            // 3 min pour saisir SSID/MdP
+  wm.setConfigPortalTimeout(180);          // 3 min pour saisir SSID/MdP
   bool ok = wm.autoConnect("ESP8266-Setup"); // AP = ESP8266-Setup (sans mdp)
   if (!ok) {
     Serial.println(F("[WiFi] Echec config. Reboot..."));
@@ -60,11 +61,7 @@ void loop() {
     last = now;
   }
 
-  //digitalWrite(LED, LOW);   // allume
-  //delay(500);
   digitalWrite(LED, HIGH);  // éteint
-  //delay(500);
-
   delay(300000);
 }
 
@@ -91,8 +88,8 @@ bool httpCheckAndUpdate() {
   Serial.printf("[OTA] HTTP code: %d (%s)\n", code, http.errorToString(code).c_str());
   if (code != HTTP_CODE_OK) { http.end(); return false; }
 
-  // DynamicJsonDocument = moins de risques que Static trop juste
-  DynamicJsonDocument doc(1536); // large pour 3 champs + marge
+  // JSON : doc dynamique large (sécurise la marge)
+  DynamicJsonDocument doc(1536);
   DeserializationError err = deserializeJson(doc, http.getStream());
   http.end(); // libère tout ce qui touche au manifest
   if (err) {
@@ -115,30 +112,104 @@ bool httpCheckAndUpdate() {
     return false;
   }
 
-  // Petit garde-fou sur la taille URL (logs + early return si énorme)
-  if (strlen(url) > 230) { // marge confortable pour un buffer 256 si jamais
+  // Garde-fou sur la taille URL
+  if (strlen(url) > 230) {
     Serial.println(F("[OTA] URL trop longue, abort"));
     return false;
   }
 
-  // ... après avoir validé model/version/url ...
+  // -------- 2) OTA MANUELLE (plus robuste que ESPhttpUpdate sur ESP8266) --------
+  // (1) Client TLS dédié, buffers + timeouts
+  std::unique_ptr<BearSSL::WiFiClientSecure> cli2(new BearSSL::WiFiClientSecure);
+  cli2->setInsecure();               // (ancrer un cert = mieux en prod)
+  cli2->setBufferSizes(2048, 1024);  // records TLS plus gros (ok sur D1 mini)
+  cli2->setTimeout(45000);           // 45 s pour un .bin
 
-// 2) OTA: NE PAS réutiliser le client du manifest
-std::unique_ptr<BearSSL::WiFiClientSecure> cli2(new BearSSL::WiFiClientSecure);
-cli2->setInsecure();
-cli2->setBufferSizes(1024, 1024);   // buffers TLS plus grands
-cli2->setTimeout(30000);            // 30 s pour le binaire
+  // (2) HTTP client configuré
+  HTTPClient http2;
+  http2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  http2.setTimeout(45000);
+  http2.useHTTP10(true); // HTTP/1.0 limite les soucis de chunked/keep-alive
 
-ESPhttpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-ESPhttpUpdate.setClientTimeout(30000);     // <- la bonne méthode sur ESP8266
-ESPhttpUpdate.rebootOnUpdate(true);        // optionnel
+  // (3) Lancer la requête
+  Serial.printf("[OTA] Download: %s\n", url);
+  if (!http2.begin(*cli2, String(url))) {
+    Serial.println(F("[OTA] http.begin() failed (bin)"));
+    return false;
+  }
+  int rc = http2.GET();
+  Serial.printf("[OTA] GET bin rc=%d (%s)\n", rc, http2.errorToString(rc).c_str());
+  if (rc != HTTP_CODE_OK) { http2.end(); return false; }
 
-yield();
-t_httpUpdate_return ret = ESPhttpUpdate.update(*cli2, String(url), String(FW_VERSION));
-yield();
+  // (4) Récup taille & MD5 (optionnel via manifest)
+  int contentLength = http2.getSize(); // -1 si chunked
+  const char* md5 = doc["md5"] | "";
+  if (md5[0]) {
+    Serial.printf("[OTA] MD5: %s\n", md5);
+    Update.setMD5(md5);
+  }
 
-Serial.printf("[OTA] result=%d (%s)\n", ret, ESPhttpUpdate.getLastErrorString().c_str());
-return (ret == HTTP_UPDATE_OK);
+  // (5) Préparer l’Update
+  Serial.printf("[OTA] free heap before: %u\n", ESP.getFreeHeap());
 
+  size_t expected =
+      (contentLength > 0) ? (size_t)contentLength
+#ifdef UPDATE_SIZE_UNKNOWN
+                          : (size_t)UPDATE_SIZE_UNKNOWN
+#else
+                          : (size_t)ESP.getFreeSketchSpace()
+#endif
+      ;
 
+  bool canBegin = Update.begin(expected);  // ESP8266 core: besoin d'une taille
+  if (!canBegin) {
+    Serial.printf("[OTA] Update.begin failed (%s)\n", Update.getErrorString());
+    Update.printError(Serial);
+    http2.end();
+    return false;
+  }
+
+  // (6) Ecrire le flux OTA avec yield() réguliers
+  WiFiClient *stream = http2.getStreamPtr();
+  uint8_t buf[1024];
+  uint32_t written = 0;
+  uint32_t lastYield = millis();
+
+  while (http2.connected()) {
+    size_t avail = stream->available();
+    if (avail) {
+      size_t n = stream->readBytes(buf, (avail > sizeof(buf)) ? sizeof(buf) : avail);
+      size_t w = Update.write(buf, n);
+      written += w;
+      if (w != n) {
+        Serial.printf("[OTA] write short (%u/%u)\n", (unsigned)w, (unsigned)n);
+        http2.end();
+        Update.end();   // pas d'Update.abort() sur cette core
+        return false;
+      }
+    } else {
+      // Nourrir le WDT si pas de données un petit moment
+      if (millis() - lastYield > 20) { yield(); lastYield = millis(); }
+    }
+
+    // Fin de flux ?
+    if (!avail && stream->available() == 0 && stream->peek() == -1 && !stream->connected()) break;
+  }
+
+  Serial.printf("[OTA] written: %u bytes\n", written);
+  http2.end();
+
+  if (!Update.end()) {
+    Serial.printf("[OTA] Update.end failed (%s)\n", Update.getErrorString());
+    Update.printError(Serial);
+    return false;
+  }
+  if (!Update.isFinished()) {
+    Serial.println(F("[OTA] Update not finished"));
+    return false;
+  }
+
+  Serial.println(F("[OTA] Update OK, reboot..."));
+  ESP.restart();
+  return true;
 }

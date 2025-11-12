@@ -1,5 +1,13 @@
+
 {
   "model": "esp8266-power",
-  "version": "v1.0.1",
-  "url": "https://raw.githubusercontent.com/yvsim001/esp8266_OAT/main/src/firmware.bin"
+  "version": "2025.11.12.150001",
+  "url": "https://raw.githubusercontent.com/yvsim001/esp8266_OAT/gh-pages/firmware/esp8266-power-2025.11.12.150001.bin",
+  "md5": "REPLACE_WITH_MD5_HEX",
+  "size": 0,
+  "notes": "Minor fixes and OTA stability improvements.",
+  "min_core": "esp8266-3.1.2",
+  "board": ["d1_mini", "d1_mini_pro"],
+  "format": 1
 }
+
