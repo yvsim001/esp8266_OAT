@@ -61,7 +61,7 @@ void loop() {
     last = now;
   }
 
-  digitalWrite(LED, HIGH);  // éteint
+  digitalWrite(LED, LOW);  // éteint
   delay(300000);
 }
 
