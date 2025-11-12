@@ -54,11 +54,11 @@ void loop() {
   uint32_t now = millis();
 
   // Check OTA toutes les 60 s (mets 600000 pour 10 min)
-  /*if (now - last > 60000UL) {
+  if (now - last > 60000UL) {
     Serial.println(F("[OTA] Check..."));
     httpCheckAndUpdate();
     last = now;
-  }*/
+  }
 
   //digitalWrite(LED, LOW);   // allume
   //delay(500);
