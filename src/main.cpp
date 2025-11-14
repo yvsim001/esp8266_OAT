@@ -61,6 +61,10 @@ void loop() {
 
   digitalWrite(LED, HIGH);
   delay(1000);
+  digitalWrite(LED, HIGH);
+  delay(1000);
+
+  delay(1000);
 }
 
 // --- OTA PULL (HTTPS) ---
