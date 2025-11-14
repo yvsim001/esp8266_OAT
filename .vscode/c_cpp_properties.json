@@ -115,7 +115,7 @@
                 "ARDUINO_ESP8266_WEMOS_D1MINI",
                 "FW_MODEL=\"esp8266-power\"",
                 "FW_VERSION=\"v1.0.0\"",
-                "FW_MANIFEST_URL=\"https://raw.githubusercontent.com/yvsim001/esp8266_OTA/gh-pages/manifest.json\"",
+                "FW_MANIFEST_URL=\"http://raw.githubusercontent.com/yvsim001/esp8266_OTA/gh-pages/manifest.json\"",
                 "F_CPU=80000000L",
                 "__ets__",
                 "ICACHE_FLASH",
